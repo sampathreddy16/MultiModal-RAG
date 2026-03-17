@@ -23,12 +23,10 @@ st.set_page_config(
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-# SDK processes PDFs at 96 DPI (confirmed: 612pt × 96/72 = 816px matches bbox values)
+# Render at exactly the same DPI the SDK uses — bboxes then map 1:1 with no scaling.
+# After drawing boxes we upscale the image 2× purely for screen clarity.
 SDK_DPI = 96
-
-# Display at higher resolution for clarity, then scale bboxes up to match
-DISPLAY_DPI = 150
-SCALE = DISPLAY_DPI / SDK_DPI  # bbox coords × SCALE = display pixel coords
+UPSCALE = 2  # visual upscale after annotation (does NOT affect bbox coordinates)
 
 # Color map: element label → (R, G, B)
 LABEL_COLORS: dict[str, tuple[int, int, int]] = {
@@ -62,11 +60,11 @@ def get_color(label: str) -> tuple[int, int, int]:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def render_page(pdf_path: Path, page_num: int) -> Image.Image:
-    """Render a PDF page as a PIL Image at DISPLAY_DPI."""
+    """Render a PDF page as a PIL Image at SDK_DPI so bbox coords map 1:1."""
     doc = fitz.open(str(pdf_path))
     try:
         page = doc.load_page(page_num)
-        mat = fitz.Matrix(DISPLAY_DPI / 72, DISPLAY_DPI / 72)
+        mat = fitz.Matrix(SDK_DPI / 72, SDK_DPI / 72)
         pix = page.get_pixmap(matrix=mat)
         return Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
     finally:
@@ -74,7 +72,11 @@ def render_page(pdf_path: Path, page_num: int) -> Image.Image:
 
 
 def draw_bboxes(img: Image.Image, elements: list) -> Image.Image:
-    """Draw colored bounding boxes and labels onto the image."""
+    """Draw colored bounding boxes onto the image, then upscale for display.
+
+    Bboxes are drawn at 1:1 (no scaling) because the image was rendered at
+    the same DPI the SDK used. The result is then upscaled for screen clarity.
+    """
     img = img.copy()
     draw = ImageDraw.Draw(img, "RGBA")
 
@@ -84,7 +86,7 @@ def draw_bboxes(img: Image.Image, elements: list) -> Image.Image:
 
         label = el.label
         color = get_color(label)
-        x1, y1, x2, y2 = [int(v * SCALE) for v in el.bbox]
+        x1, y1, x2, y2 = int(el.bbox[0]), int(el.bbox[1]), int(el.bbox[2]), int(el.bbox[3])
 
         # Skip degenerate boxes
         if x2 <= x1 or y2 <= y1:
@@ -105,7 +107,9 @@ def draw_bboxes(img: Image.Image, elements: list) -> Image.Image:
                        fill=(*color, 200))
         draw.text((tx, ty), badge_text, fill=(255, 255, 255))
 
-    return img
+    # Upscale for screen clarity — bboxes already drawn, so no coordinate shift
+    w, h = img.size
+    return img.resize((w * UPSCALE, h * UPSCALE), Image.LANCZOS)
 
 
 def build_legend(labels_present: set[str]) -> None:
