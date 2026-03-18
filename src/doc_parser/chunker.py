@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from doc_parser.post_processor import ElementLike
 
@@ -13,10 +13,36 @@ logger = logging.getLogger(__name__)
 _TOKEN_WORD_RATIO: float = 1.3
 
 # Labels that must never be split across chunks
-ATOMIC_LABELS: frozenset[str] = frozenset({"table", "formula", "inline_formula", "algorithm"})
+ATOMIC_LABELS: frozenset[str] = frozenset(
+    {"table", "formula", "inline_formula", "algorithm", "image", "figure"}
+)
 
 # Labels that are headings/titles — attach to following content
 TITLE_LABELS: frozenset[str] = frozenset({"document_title", "paragraph_title"})
+
+# Modality classification sets
+_IMAGE_TYPES: frozenset[str] = frozenset({"image", "figure"})
+_TABLE_TYPES: frozenset[str] = frozenset({"table"})
+_FORMULA_TYPES: frozenset[str] = frozenset({"formula", "inline_formula"})
+
+
+def _infer_modality(element_types: list[str]) -> str:
+    """Derive chunk modality from element label(s).
+
+    Args:
+        element_types: List of element labels in the chunk.
+
+    Returns:
+        One of: "image", "table", "formula", "text".
+    """
+    types = frozenset(element_types)
+    if types & _IMAGE_TYPES:
+        return "image"
+    if types & _TABLE_TYPES:
+        return "table"
+    if types & _FORMULA_TYPES:
+        return "formula"
+    return "text"
 
 
 @dataclass
@@ -24,13 +50,16 @@ class Chunk:
     """A RAG-ready document chunk.
 
     Attributes:
-        text: The chunk text content.
+        text: The chunk text content (or AI caption for image chunks).
         chunk_id: Unique identifier in format "{source_file}_{page}_{idx}".
         page: Page number the chunk came from.
         element_types: List of element labels included in this chunk.
         bbox: Bounding box [x1, y1, x2, y2] or None if multi-element chunk.
         source_file: Source document filename.
-        is_atomic: True for atomic elements (tables, formulas) that must not be split.
+        is_atomic: True for atomic elements (tables, formulas, images) that must not be split.
+        modality: Content type — "text" | "image" | "table" | "formula".
+        image_base64: Base64-encoded PNG of the cropped region (set by image_captioner).
+        caption: AI-generated caption text (set by image_captioner).
     """
 
     text: str
@@ -40,6 +69,9 @@ class Chunk:
     bbox: list[float] | None
     source_file: str
     is_atomic: bool
+    modality: str = field(default="text")
+    image_base64: str | None = field(default=None)
+    caption: str | None = field(default=None)
 
 
 def _estimate_tokens(text: str) -> int:
@@ -146,6 +178,7 @@ def structure_aware_chunking(
             bbox=None,  # multi-element chunks don't have a single bbox
             source_file=source_file,
             is_atomic=False,
+            modality=_infer_modality(labels_to_flush),
         )
         chunks.append(chunk)
         chunk_idx += 1
@@ -157,10 +190,8 @@ def structure_aware_chunking(
         label = element.label
         text = element.text.strip()
 
-        if not text:
-            continue
-
         # Atomic elements → flush current, emit atomic chunk, continue
+        # Image/figure elements may have empty text; captioner fills it in later
         if label in ATOMIC_LABELS:
             flush_current()
             atomic_chunk = Chunk(
@@ -171,9 +202,13 @@ def structure_aware_chunking(
                 bbox=element.bbox,
                 source_file=source_file,
                 is_atomic=True,
+                modality=_infer_modality([label]),
             )
             chunks.append(atomic_chunk)
             chunk_idx += 1
+            continue
+
+        if not text:
             continue
 
         # Title elements → store as pending; will attach to next content
@@ -207,6 +242,7 @@ def structure_aware_chunking(
                     bbox=None,
                     source_file=source_file,
                     is_atomic=False,
+                    modality=_infer_modality([label]),
                 )
                 chunks.append(chunk)
                 chunk_idx += 1

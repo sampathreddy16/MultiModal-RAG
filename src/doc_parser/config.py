@@ -21,6 +21,37 @@ class Settings(BaseSettings):
     output_dir: str = "./output"
     config_yaml_path: str = "config.yaml"
 
+    # OpenAI
+    openai_api_key: SecretStr | None = None
+    openai_llm_model: str = "gpt-4o"
+
+    # Embedding (provider-agnostic)
+    embedding_provider: str = "openai"  # "openai" | "gemini"
+    embedding_model: str = "text-embedding-3-large"
+    embedding_dimensions: int = 3072
+    gemini_api_key: SecretStr | None = None
+
+    # Qdrant
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: SecretStr | None = None
+    qdrant_collection_name: str = "documents"
+
+    # Reranker
+    reranker_backend: str = "openai"  # "jina" | "openai" | "bge" | "qwen"
+    reranker_top_n: int = 5
+    jina_api_key: SecretStr | None = None
+
+    # Feature flags
+    image_caption_enabled: bool = True
+
+    # API server
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+    api_workers: int = 1
+
+    # Logging
+    log_json: bool = False
+
 
 _settings: Settings | None = None
 

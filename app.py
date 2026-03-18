@@ -132,6 +132,8 @@ if "result" not in st.session_state:
     st.session_state.result: ParseResult | None = None
 if "pdf_path" not in st.session_state:
     st.session_state.pdf_path: Path | None = None
+if "uploaded_filename" not in st.session_state:
+    st.session_state.uploaded_filename: str | None = None
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
@@ -144,24 +146,22 @@ with st.sidebar:
     uploaded = st.file_uploader("Choose a PDF", type=["pdf"])
 
     if uploaded:
-        # Save upload to temp file (needed for PyMuPDF + glmocr)
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        tmp.write(uploaded.read())
-        tmp.flush()
-        tmp_path = Path(tmp.name)
-
-        if (
-            st.session_state.pdf_path is None
-            or st.session_state.pdf_path.name != tmp_path.name
-        ):
-            st.session_state.pdf_path = tmp_path
+        # Only write a new temp file when the user has picked a different PDF.
+        # Comparing by original filename avoids recreating the temp file (and
+        # wiping the parse result) on every slider/widget rerun.
+        if st.session_state.uploaded_filename != uploaded.name:
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            tmp.write(uploaded.read())
+            tmp.flush()
+            st.session_state.pdf_path = Path(tmp.name)
+            st.session_state.uploaded_filename = uploaded.name
             st.session_state.result = None  # reset on new upload
 
         if st.button("Parse Document", type="primary", use_container_width=True):
             with st.spinner("Sending to GLM-OCR MaaS API…"):
                 try:
                     parser = DocumentParser()
-                    st.session_state.result = parser.parse_file(tmp_path)
+                    st.session_state.result = parser.parse_file(st.session_state.pdf_path)
                     st.success(
                         f"Done — {len(st.session_state.result.pages)} pages, "
                         f"{st.session_state.result.total_elements} elements"

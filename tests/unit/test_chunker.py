@@ -95,3 +95,71 @@ class TestStructureAwareChunking:
         from doc_parser.chunker import structure_aware_chunking
         chunks = structure_aware_chunking([], source_file="test.pdf", page=1)
         assert chunks == []
+
+    # ── Phase 2: modality tests ──────────────────────────────────────────────
+
+    def test_image_element_produces_atomic_chunk_with_image_modality(self):
+        """An 'image' element becomes an atomic chunk with modality='image'."""
+        from doc_parser.chunker import structure_aware_chunking
+        elements = [ParsedElement("image", "", [10, 20, 500, 600], 0.9, 0)]
+        chunks = structure_aware_chunking(elements, source_file="test.pdf", page=1)
+        assert len(chunks) == 1
+        assert chunks[0].is_atomic is True
+        assert chunks[0].modality == "image"
+
+    def test_figure_element_produces_atomic_chunk_with_image_modality(self):
+        """A 'figure' element becomes an atomic chunk with modality='image'."""
+        from doc_parser.chunker import structure_aware_chunking
+        elements = [ParsedElement("figure", "Fig. 1", [10, 20, 500, 600], 0.9, 0)]
+        chunks = structure_aware_chunking(elements, source_file="test.pdf", page=1)
+        assert len(chunks) == 1
+        assert chunks[0].is_atomic is True
+        assert chunks[0].modality == "image"
+
+    def test_table_chunk_has_table_modality(self):
+        """A 'table' atomic chunk has modality='table'."""
+        from doc_parser.chunker import structure_aware_chunking
+        table_html = "<table><tr><td>A</td></tr></table>"
+        elements = [ParsedElement("table", table_html, [0, 0, 1, 1], 0.9, 0)]
+        chunks = structure_aware_chunking(elements, source_file="test.pdf", page=1)
+        assert chunks[0].modality == "table"
+
+    def test_formula_chunk_has_formula_modality(self):
+        """A 'formula' atomic chunk has modality='formula'."""
+        from doc_parser.chunker import structure_aware_chunking
+        elements = [ParsedElement("formula", "E = mc^2", [0, 0, 1, 1], 0.9, 0)]
+        chunks = structure_aware_chunking(elements, source_file="test.pdf", page=1)
+        assert chunks[0].modality == "formula"
+
+    def test_paragraph_chunk_has_text_modality(self):
+        """Regular paragraph chunks have modality='text'."""
+        from doc_parser.chunker import structure_aware_chunking
+        elements = [ParsedElement("paragraph", "Some regular text.", [0, 0, 1, 1], 0.9, 0)]
+        chunks = structure_aware_chunking(elements, source_file="test.pdf", page=1)
+        assert chunks[0].modality == "text"
+
+    def test_mixed_page_image_chunk_is_separate_from_text(self):
+        """A page with text + image produces separate chunks; image is not merged into text."""
+        from doc_parser.chunker import structure_aware_chunking
+        elements = [
+            ParsedElement("paragraph", "Introduction text here.", [0, 0, 500, 200], 0.9, 0),
+            ParsedElement("image", "", [0, 200, 500, 600], 0.9, 1),
+            ParsedElement("paragraph", "Conclusion text here.", [0, 600, 500, 800], 0.9, 2),
+        ]
+        chunks = structure_aware_chunking(elements, source_file="test.pdf", page=1)
+        modalities = [c.modality for c in chunks]
+        assert "image" in modalities
+        # Image chunk must be separate — no text chunk should contain an image element
+        for c in chunks:
+            if c.modality == "image":
+                assert c.is_atomic is True
+            else:
+                assert "image" not in c.element_types
+
+    def test_chunk_default_fields_are_none(self):
+        """image_base64 and caption default to None on fresh chunks."""
+        from doc_parser.chunker import structure_aware_chunking
+        elements = [ParsedElement("paragraph", "Hello", [0, 0, 1, 1], 0.9, 0)]
+        chunks = structure_aware_chunking(elements, source_file="test.pdf", page=1)
+        assert chunks[0].image_base64 is None
+        assert chunks[0].caption is None
