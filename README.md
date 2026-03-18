@@ -936,7 +936,8 @@ uv run mypy src/
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `Z_AI_API_KEY` | Yes | — | Z.AI cloud API key |
+| `PARSER_BACKEND` | No | `cloud` | Parser backend: `cloud` (Z.AI MaaS) \| `ollama` (local Ollama) |
+| `Z_AI_API_KEY` | Yes* | — | Z.AI cloud API key (required when `PARSER_BACKEND=cloud`) |
 | `OPENAI_API_KEY` | Yes* | — | OpenAI API key (captioning, generation, and embeddings when `EMBEDDING_PROVIDER=openai`) |
 | `OPENAI_LLM_MODEL` | No | `gpt-4o` | LLM model for generation |
 | `EMBEDDING_PROVIDER` | No | `openai` | Embedding backend: `openai` \| `gemini` |

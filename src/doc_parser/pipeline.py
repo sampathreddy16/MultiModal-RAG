@@ -154,7 +154,7 @@ class DocumentParser:
         settings = get_settings()
         self._parser = GlmOcr(
             config_path=settings.config_yaml_path,
-            api_key=settings.z_ai_api_key.get_secret_value(),
+            api_key=settings.z_ai_api_key.get_secret_value() if settings.z_ai_api_key else "",
         )
         logger.info("DocumentParser initialized with config: %s", settings.config_yaml_path)
 
@@ -179,12 +179,16 @@ class DocumentParser:
 
         # For PDFs, explicitly pass the full page range so all pages are processed.
         # Without start_page_id/end_page_id the SDK defaults to page 1 only.
+        settings = get_settings()
         parse_kwargs: dict[str, Any] = {}
         if file_path.suffix.lower() == ".pdf":
             total_pages = count_pdf_pages(file_path)
             parse_kwargs["start_page_id"] = 0
             parse_kwargs["end_page_id"] = total_pages - 1
             logger.info("PDF has %d pages — parsing all", total_pages)
+
+        if settings.parser_backend == "ollama":
+            parse_kwargs["save_layout_visualization"] = False
 
         raw = self._parser.parse(str(file_path), **parse_kwargs)
         result = ParseResult.from_sdk_result(raw, source_file=str(file_path))

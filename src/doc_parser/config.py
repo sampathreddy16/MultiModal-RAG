@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,7 +16,9 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    z_ai_api_key: SecretStr
+    # Parser backend
+    parser_backend: str = "cloud"  # "cloud" | "ollama"
+    z_ai_api_key: SecretStr | None = None
     log_level: str = "INFO"
     output_dir: str = "./output"
     config_yaml_path: str = "config.yaml"
@@ -51,6 +53,23 @@ class Settings(BaseSettings):
 
     # Logging
     log_json: bool = False
+
+    @model_validator(mode="after")
+    def _validate_backend(self) -> Settings:
+        """Enforce backend-specific constraints and auto-set config path."""
+        if self.parser_backend == "cloud":
+            if self.z_ai_api_key is None:
+                raise ValueError(
+                    "Z_AI_API_KEY is required when PARSER_BACKEND=cloud"
+                )
+        elif self.parser_backend == "ollama":
+            if self.config_yaml_path == "config.yaml":
+                self.config_yaml_path = "ollama/config.yaml"
+        else:
+            raise ValueError(
+                f"PARSER_BACKEND must be 'cloud' or 'ollama', got: {self.parser_backend!r}"
+            )
+        return self
 
 
 _settings: Settings | None = None
