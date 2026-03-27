@@ -2,7 +2,7 @@
 # Base image includes CUDA 12.1 runtime + cuDNN for PyTorch GPU acceleration.
 # PP-DocLayoutV3 (layout detection) runs on GPU inside this container.
 # GLM-OCR runs in the separate Ollama container, also GPU-accelerated.
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
 WORKDIR /app
 
